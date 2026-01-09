@@ -6,7 +6,7 @@ import 'package:otsp_attendance/app/core/services/upload_queue_service.dart';
 import 'package:otsp_attendance/app/data/models/upload_queue_model.dart';
 import '../../../data/providers/api_provider.dart';
 import '../../../data/models/student_model.dart';
-import '../../../core/values/app_colors.dart';
+import '../../../core/utils/custom_toast.dart';
 
 class PhotoCaptureController extends GetxController {
   final ApiProvider apiProvider = ApiProvider();
@@ -30,13 +30,7 @@ class PhotoCaptureController extends GetxController {
       final cameras = await availableCameras();
 
       if (cameras.isEmpty) {
-        Get.snackbar(
-          'Error',
-          'No camera found',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.textWhite,
-        );
+        CustomToast.error('No camera found');
         return;
       }
 
@@ -54,13 +48,7 @@ class PhotoCaptureController extends GetxController {
       await cameraController.initialize();
       isCameraInitialized.value = true;
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to initialize camera: $e',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.error,
-        colorText: AppColors.textWhite,
-      );
+      CustomToast.error('Failed to initialize camera: $e');
     }
   }
 
@@ -73,21 +61,9 @@ class PhotoCaptureController extends GetxController {
       final XFile photo = await cameraController.takePicture();
       capturedImage.value = File(photo.path);
 
-      Get.snackbar(
-        'Success',
-        'Photo captured! Review before uploading.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.success,
-        colorText: AppColors.textWhite,
-      );
+      CustomToast.success('Photo captured! Review before uploading.');
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to capture photo: $e',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.error,
-        colorText: AppColors.textWhite,
-      );
+      CustomToast.error('Failed to capture photo: $e');
     }
   }
 
@@ -97,13 +73,7 @@ class PhotoCaptureController extends GetxController {
 
   Future<void> uploadPhoto() async {
     if (capturedImage.value == null || student == null) {
-      Get.snackbar(
-        'Error',
-        'No photo or student data',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.error,
-        colorText: AppColors.textWhite,
-      );
+      CustomToast.error('No photo or student data');
       return;
     }
 
@@ -130,14 +100,7 @@ class PhotoCaptureController extends GetxController {
         print('Response: ${response.data}');
 
         if (response.data['success'] == true) {
-          Get.snackbar(
-            'Success',
-            'Photo uploaded successfully!',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: AppColors.success,
-            colorText: AppColors.textWhite,
-            duration: Duration(seconds: 2),
-          );
+          CustomToast.success('Photo uploaded successfully!');
 
           // Delete local file after successful upload
           await capturedImage.value!.delete();
@@ -153,7 +116,7 @@ class PhotoCaptureController extends GetxController {
       print('=== ADDING TO QUEUE ===');
 
       final queueItem = UploadQueueModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: DateTime.now().millisecondsSinceEpoch,
         rollNumber: student!.rollNumber,
         studentName: student!.name,
         imagePath: capturedImage.value!.path,
@@ -162,15 +125,10 @@ class PhotoCaptureController extends GetxController {
 
       await queueService.addToQueue(queueItem);
 
-      Get.snackbar(
-        isOnline ? 'Queued' : 'Offline',
+      CustomToast.warning(
         isOnline
             ? 'Photo saved. Will retry upload.'
             : 'Photo saved. Will upload when online.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.warning,
-        colorText: AppColors.textWhite,
-        duration: Duration(seconds: 3),
       );
 
       // Go back to home
@@ -184,7 +142,7 @@ class PhotoCaptureController extends GetxController {
       final queueService = Get.find<UploadQueueService>();
 
       final queueItem = UploadQueueModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: DateTime.now().millisecondsSinceEpoch,
         rollNumber: student!.rollNumber,
         studentName: student!.name,
         imagePath: capturedImage.value!.path,
@@ -193,14 +151,7 @@ class PhotoCaptureController extends GetxController {
 
       await queueService.addToQueue(queueItem);
 
-      Get.snackbar(
-        'Queued',
-        'Photo saved. Will retry upload.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.warning,
-        colorText: AppColors.textWhite,
-        duration: Duration(seconds: 3),
-      );
+      CustomToast.warning('Photo saved. Will retry upload.');
 
       await Future.delayed(Duration(seconds: 2));
       Get.offAllNamed('/home');
@@ -208,13 +159,7 @@ class PhotoCaptureController extends GetxController {
       print('=== ERROR ===');
       print('Error: $e');
 
-      Get.snackbar(
-        'Error',
-        'Failed to save photo: $e',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.error,
-        colorText: AppColors.textWhite,
-      );
+      CustomToast.error('Failed to save photo: $e');
     } finally {
       isUploading.value = false;
     }

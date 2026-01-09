@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:otsp_attendance/app/core/values/app_colors.dart';
 import '../../data/models/student_model.dart';
 import '../../data/providers/api_provider.dart';
+import '../utils/custom_toast.dart';
 
 class StudentCacheService extends GetxService {
   final GetStorage storage = GetStorage();
@@ -99,11 +98,7 @@ class StudentCacheService extends GetxService {
 
     if (!await isOnline()) {
       print('No internet connection for sync');
-      Get.snackbar(
-        'Offline',
-        'Cannot sync without internet connection',
-        snackPosition: SnackPosition.BOTTOM,
-      );
+      CustomToast.warning('Cannot sync without internet connection');
       return false;
     }
 
@@ -112,12 +107,7 @@ class StudentCacheService extends GetxService {
     try {
       print('=== SYNCING STUDENTS ===');
 
-      Get.snackbar(
-        'Syncing...',
-        'Downloading student data',
-        snackPosition: SnackPosition.BOTTOM,
-        duration: Duration(seconds: 2),
-      );
+      CustomToast.info('Downloading student data');
 
       // Download all students from API
       final response = await apiProvider.bulkDownloadStudents(testId: testId);
@@ -141,32 +131,17 @@ class StudentCacheService extends GetxService {
 
         print('Cached ${cachedStudents.length} students');
 
-        Get.snackbar(
-          'Sync Complete',
-          'Downloaded ${cachedStudents.length} students for offline use',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.success,
-          colorText: Colors.white,
-          duration: Duration(seconds: 3),
-        );
+        CustomToast.success('Downloaded ${cachedStudents.length} students for offline use');
 
         return true;
       } else {
-        Get.snackbar(
-          'Sync Failed',
-          response.data['message'] ?? 'Could not download students',
-          snackPosition: SnackPosition.BOTTOM,
-        );
+        CustomToast.error(response.data['message'] ?? 'Could not download students');
         return false;
       }
     } catch (e) {
       print('Sync error: $e');
 
-      Get.snackbar(
-        'Sync Failed',
-        'Could not sync student data: $e',
-        snackPosition: SnackPosition.BOTTOM,
-      );
+      CustomToast.error('Could not sync student data: $e');
 
       return false;
     } finally {
@@ -189,14 +164,7 @@ class StudentCacheService extends GetxService {
 
     if (!online) {
       print('Skipping auto-sync - offline');
-      Get.snackbar(
-        'Offline Mode',
-        'Connect to internet to sync student data',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.warning,
-        colorText: Colors.white,
-        duration: Duration(seconds: 3),
-      );
+      CustomToast.warning('Connect to internet to sync student data');
       return;
     }
 
@@ -204,15 +172,7 @@ class StudentCacheService extends GetxService {
     if (lastSyncTime.value == null || cachedStudents.isEmpty) {
       print('First time or empty cache - syncing...');
 
-      Get.snackbar(
-        'Syncing...',
-        'Downloading student data for offline use',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.info,
-        colorText: Colors.white,
-        duration: Duration(seconds: 2),
-        showProgressIndicator: true,
-      );
+      CustomToast.info('Downloading student data for offline use');
 
       await syncStudents();
       return;

@@ -138,6 +138,7 @@ class UploadQueueService extends GetxService {
           if (index != -1) {
             uploadQueue[index] = item.copyWith(
               errorMessage: e.toString(),
+              retryCount: item.retryCount + 1,
             );
             saveQueue();
           }
@@ -151,10 +152,42 @@ class UploadQueueService extends GetxService {
     }
   }
 
-  // Remove item from queue
-  void removeFromQueue(String id) {
-    uploadQueue.removeWhere((item) => item.id == id);
-    saveQueue();
+  // ✅ NEW: Get all queue items (for History page)
+  Future<List<CapturedStudent>> getAllQueueItems() async {
+    try {
+      loadQueue(); // Ensure latest data
+      return uploadQueue.map((item) => item.toCapturedStudent()).toList()
+        ..sort((a, b) =>
+            b.capturedAt.compareTo(a.capturedAt)); // Sort by newest first
+    } catch (e) {
+      print('Error getting all queue items: $e');
+      return [];
+    }
+  }
+
+  // ✅ UPDATED: Remove item from queue (accepts int now)
+  Future<void> removeFromQueue(int id) async {
+    try {
+      // Find the item first to delete the image file
+      final item = uploadQueue.firstWhereOrNull((item) => item.id == id);
+
+      if (item != null) {
+        // Delete image file
+        final file = File(item.imagePath);
+        if (await file.exists()) {
+          await file.delete();
+          print('Deleted image file: ${item.imagePath}');
+        }
+
+        // Remove from queue
+        uploadQueue.removeWhere((item) => item.id == id);
+        saveQueue();
+        print('Removed item from queue: $id');
+      }
+    } catch (e) {
+      print('Error removing from queue: $e');
+      rethrow;
+    }
   }
 
   // Cleanup old uploaded items
@@ -189,5 +222,10 @@ class UploadQueueService extends GetxService {
   void clearQueue() {
     uploadQueue.clear();
     saveQueue();
+  }
+
+  // ✅ NEW: Retry failed uploads
+  Future<void> retryFailedUploads() async {
+    await processQueue();
   }
 }

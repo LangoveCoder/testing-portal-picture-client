@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:get/get.dart' hide Response, FormData, MultipartFile;
 import '../../core/values/app_constants.dart';
 
 class ApiProvider {
@@ -37,24 +36,85 @@ class ApiProvider {
     ));
   }
 
-  // Validate PIN
-  Future<Response> validatePin(String pin) async {
+  // Authenticate Operator
+  Future<Response> authenticateOperator(String email, String password) async {
     try {
-      // For now, validate locally
-      if (pin == AppConstants.appPin) {
-        return Response(
-          requestOptions: RequestOptions(path: ''),
-          data: {'success': true, 'message': 'Access granted'},
-          statusCode: 200,
-        );
-      } else {
-        return Response(
-          requestOptions: RequestOptions(path: ''),
-          data: {'success': false, 'message': 'Invalid PIN'},
-          statusCode: 401,
-        );
-      }
+      print('=== API PROVIDER AUTHENTICATION ===');
+      print('Base URL: ${AppConstants.baseUrl}');
+      print('Endpoint: /biometric-operator/login');
+      print('Full URL: ${AppConstants.baseUrl}/biometric-operator/login');
+      print('Email: $email');
+      print('Password length: ${password.length}');
+      
+      final requestData = {
+        'email': email,
+        'password': password,
+        'device_info': {
+          'platform': 'Android',
+          'app_version': '1.0.0',
+          'device_model': 'Mobile Device',
+        },
+      };
+      
+      print('Request data: $requestData');
+      
+      final response = await _dio.post(
+        '/biometric-operator/login',
+        data: requestData,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          validateStatus: (status) {
+            // Accept all status codes to handle them manually
+            return status != null && status < 500;
+          },
+        ),
+      );
+      
+      print('=== API RESPONSE RECEIVED ===');
+      print('Status Code: ${response.statusCode}');
+      print('Headers: ${response.headers}');
+      print('Data Type: ${response.data.runtimeType}');
+      print('Raw Response: ${response.data}');
+      
+      return response;
     } catch (e) {
+      print('=== API PROVIDER ERROR ===');
+      print('Error type: ${e.runtimeType}');
+      print('Error message: $e');
+      
+      if (e is DioException) {
+        print('DioException details:');
+        print('- Type: ${e.type}');
+        print('- Message: ${e.message}');
+        print('- Response status: ${e.response?.statusCode}');
+        print('- Response data: ${e.response?.data}');
+        print('- Request path: ${e.requestOptions.path}');
+        print('- Request data: ${e.requestOptions.data}');
+      }
+      
+      rethrow;
+    }
+  }
+
+  // Get Available Tests for College and Operator
+  Future<Response> getAvailableTests({
+    required int collegeId,
+    required int operatorId,
+  }) async {
+    try {
+      print('Getting available tests for college: $collegeId, operator: $operatorId');
+      return await _dio.get(
+        '/attendance/tests/available',
+        queryParameters: {
+          'college_id': collegeId,
+          'operator_id': operatorId,
+        },
+      );
+    } catch (e) {
+      print('Error getting tests: $e');
       rethrow;
     }
   }

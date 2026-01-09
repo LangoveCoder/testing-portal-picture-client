@@ -9,27 +9,29 @@ class StudentSearchView extends GetView<StudentSearchController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.getBackground(context),
       appBar: AppBar(
         title: Text('Student Verification'),
         centerTitle: true,
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        iconTheme: IconThemeData(color: Colors.white),
       ),
       body: Obx(() {
         if (controller.isLoading.value) {
-          return _buildLoading();
+          return _buildLoading(context);
         }
 
         if (controller.student.value == null) {
-          return _buildNoData();
+          return _buildNoData(context);
         }
 
-        return _buildStudentInfo();
+        return _buildStudentInfo(context);
       }),
     );
   }
 
-  Widget _buildLoading() {
+  Widget _buildLoading(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -43,7 +45,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
             'Searching student...',
             style: TextStyle(
               fontSize: 16,
-              color: AppColors.textSecondary,
+              color: AppColors.getTextSecondary(context),
             ),
           ),
         ],
@@ -51,7 +53,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
     );
   }
 
-  Widget _buildNoData() {
+  Widget _buildNoData(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -59,7 +61,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
           Icon(
             Icons.person_off_rounded,
             size: 80,
-            color: AppColors.textMuted,
+            color: AppColors.getTextMuted(context),
           ),
           SizedBox(height: 20),
           Text(
@@ -67,7 +69,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              color: AppColors.getTextPrimary(context),
             ),
           ),
           SizedBox(height: 8),
@@ -75,7 +77,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
             'Please try again',
             style: TextStyle(
               fontSize: 14,
-              color: AppColors.textSecondary,
+              color: AppColors.getTextSecondary(context),
             ),
           ),
           SizedBox(height: 30),
@@ -98,7 +100,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
     );
   }
 
-  Widget _buildStudentInfo() {
+  Widget _buildStudentInfo(BuildContext context) {
     final student = controller.student.value!;
 
     return SingleChildScrollView(
@@ -106,7 +108,6 @@ class StudentSearchView extends GetView<StudentSearchController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Student Card
           // Student Card
           Container(
             width: double.infinity,
@@ -191,11 +192,11 @@ class StudentSearchView extends GetView<StudentSearchController> {
           Container(
             padding: EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.getCardBackground(context),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.shadow,
+                  color: AppColors.getShadow(context),
                   blurRadius: 10,
                   offset: Offset(0, 4),
                 ),
@@ -209,24 +210,21 @@ class StudentSearchView extends GetView<StudentSearchController> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+                    color: AppColors.getTextPrimary(context),
                   ),
                 ),
 
                 SizedBox(height: 20),
 
-                _buildInfoRow(Icons.person_outline, 'Name', student.name),
-                Divider(height: 32),
-                _buildInfoRow(
-                    Icons.person_outline, 'Father Name', student.fatherName),
-                Divider(height: 32),
-                _buildInfoRow(Icons.credit_card_rounded, 'CNIC', student.cnic),
-                Divider(height: 32),
-                _buildInfoRow(
-                    Icons.location_on_rounded, 'Venue', student.venue),
-                Divider(height: 32),
-                _buildInfoRow(
-                    Icons.assignment_rounded, 'Test', student.testName),
+                _buildInfoRow(context, Icons.person_outline, 'Name', student.name),
+                Divider(height: 32, color: AppColors.getBorder(context)),
+                _buildInfoRow(context, Icons.person_outline, 'Father Name', student.fatherName),
+                Divider(height: 32, color: AppColors.getBorder(context)),
+                _buildInfoRow(context, Icons.credit_card_rounded, 'CNIC', student.cnic),
+                Divider(height: 32, color: AppColors.getBorder(context)),
+                _buildInfoRow(context, Icons.location_on_rounded, 'Venue', student.venue),
+                Divider(height: 32, color: AppColors.getBorder(context)),
+                _buildInfoRow(context, Icons.assignment_rounded, 'Test', student.testName),
 
                 SizedBox(height: 20),
 
@@ -321,7 +319,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value) {
     return Row(
       children: [
         Container(
@@ -341,7 +339,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
                 label,
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: AppColors.getTextSecondary(context),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -350,7 +348,7 @@ class StudentSearchView extends GetView<StudentSearchController> {
                 value,
                 style: TextStyle(
                   fontSize: 16,
-                  color: AppColors.textPrimary,
+                  color: AppColors.getTextPrimary(context),
                   fontWeight: FontWeight.w600,
                 ),
               ),

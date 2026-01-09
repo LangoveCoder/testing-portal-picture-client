@@ -4,6 +4,7 @@ import 'package:get_storage/get_storage.dart';
 import '../../../core/values/app_constants.dart';
 import '../../../data/models/college_model.dart';
 import '../../../routes/app_pages.dart';
+import '../../../core/utils/custom_toast.dart';
 
 class HomeController extends GetxController {
   final GetStorage storage = GetStorage();
@@ -31,11 +32,7 @@ class HomeController extends GetxController {
 
   void searchStudent(String rollNumber) {
     if (rollNumber.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Please enter roll number',
-        snackPosition: SnackPosition.BOTTOM,
-      );
+      CustomToast.error('Please enter roll number');
       return;
     }
 

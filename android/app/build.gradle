@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.otsp_attendance"
-    compileSdk = 36
+    compileSdk = 36  // ✅ BACK TO 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -15,15 +15,16 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = "1.8"
     }
 
     defaultConfig {
         applicationId "com.example.otsp_attendance"
         minSdkVersion 21
-        targetSdkVersion 33
+        targetSdkVersion 34  // ✅ Keep this at 34 (for device compatibility)
         versionCode 1
         versionName "1.0"
+        multiDexEnabled true
     }
 
     buildTypes {
