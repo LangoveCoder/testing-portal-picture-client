@@ -216,15 +216,20 @@ class StudentSearchView extends GetView<StudentSearchController> {
 
                 SizedBox(height: 20),
 
-                _buildInfoRow(context, Icons.person_outline, 'Name', student.name),
+                _buildInfoRow(
+                    context, Icons.person_outline, 'Name', student.name),
                 Divider(height: 32, color: AppColors.getBorder(context)),
-                _buildInfoRow(context, Icons.person_outline, 'Father Name', student.fatherName),
+                _buildInfoRow(context, Icons.person_outline, 'Father Name',
+                    student.fatherName),
                 Divider(height: 32, color: AppColors.getBorder(context)),
-                _buildInfoRow(context, Icons.credit_card_rounded, 'CNIC', student.cnic),
+                _buildInfoRow(context, Icons.credit_card_rounded, 'CNIC',
+                    student.cnic ?? 'N/A'),
                 Divider(height: 32, color: AppColors.getBorder(context)),
-                _buildInfoRow(context, Icons.location_on_rounded, 'Venue', student.venue),
+                _buildInfoRow(context, Icons.location_on_rounded, 'Venue',
+                    student.venue ?? 'N/A'),
                 Divider(height: 32, color: AppColors.getBorder(context)),
-                _buildInfoRow(context, Icons.assignment_rounded, 'Test', student.testName),
+                _buildInfoRow(context, Icons.assignment_rounded, 'Test',
+                    student.testName ?? 'N/A'),
 
                 SizedBox(height: 20),
 
@@ -269,6 +274,53 @@ class StudentSearchView extends GetView<StudentSearchController> {
           ),
 
           SizedBox(height: 32),
+
+          // Mark Attendance Button
+          Container(
+            width: double.infinity,
+            height: 56,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.success, AppColors.success.withOpacity(0.7)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.success.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: ElevatedButton(
+              onPressed: () => controller.goToMarkAttendance(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text(
+                    'MARK ATTENDANCE',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          SizedBox(height: 16),
 
           // Capture Button
           Container(
@@ -319,7 +371,8 @@ class StudentSearchView extends GetView<StudentSearchController> {
     );
   }
 
-  Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+      BuildContext context, IconData icon, String label, String value) {
     return Row(
       children: [
         Container(

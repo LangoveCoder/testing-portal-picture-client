@@ -2,15 +2,18 @@ import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import '../values/app_constants.dart';
 import '../../data/models/attendance_request_model.dart';
-import '../../data/providers/attendance_api_provider.dart';
+import '../../data/providers/sync_api_provider.dart';
 import '../utils/custom_toast.dart';
+import 'auth_service.dart';
 
 class AttendanceOfflineService extends GetxService {
   final GetStorage _storage = GetStorage();
-  final AttendanceApiProvider _apiProvider = AttendanceApiProvider();
+  final SyncApiProvider _syncApiProvider = SyncApiProvider();
   final Connectivity _connectivity = Connectivity();
+  late String _deviceId;
 
   var pendingRecords = <AttendanceRequestModel>[].obs;
   var isSyncing = false.obs;
@@ -19,9 +22,37 @@ class AttendanceOfflineService extends GetxService {
   @override
   void onInit() {
     super.onInit();
+    _initializeDeviceId();
     _loadPendingRecords();
     _checkConnectivity();
     _setupConnectivityListener();
+    setAuthToken();
+  }
+
+  /// Set auth token from AuthService
+  void setAuthToken() {
+    try {
+      final authService = Get.find<AuthService>();
+      if (authService.isAuthenticated.value && authService.authToken.value.isNotEmpty) {
+        _syncApiProvider.setAuthToken(authService.authToken.value);
+        print('[AttendanceOfflineService] Auth token set from AuthService');
+      }
+    } catch (e) {
+      print('[AttendanceOfflineService] Could not get auth token: $e');
+    }
+  }
+
+  /// Initialize device ID
+  Future<void> _initializeDeviceId() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      _deviceId = 'android_${androidInfo.id}';
+      print('Device ID: $_deviceId');
+    } catch (e) {
+      print('Error getting device ID: $e');
+      _deviceId = 'android_device_${DateTime.now().millisecondsSinceEpoch}';
+    }
   }
 
   /// Load pending attendance records from storage
@@ -124,7 +155,7 @@ class AttendanceOfflineService extends GetxService {
     });
   }
 
-  /// Sync pending attendance records
+  /// Sync pending attendance records using official sync API
   Future<bool> syncPendingRecords() async {
     if (isSyncing.value) {
       print('Sync already in progress');
@@ -149,34 +180,54 @@ class AttendanceOfflineService extends GetxService {
 
       CustomToast.info('Syncing ${pendingRecords.length} attendance records...');
 
-      // Attempt to sync records
-      final response = await _apiProvider.bulkMarkAttendance(pendingRecords.toList());
+      // Step 1: Queue attendance records for sync
+      final payload = pendingRecords.map((record) {
+        return {
+          'roll_number': record.rollNumber,
+          'test_id': record.testId,
+          'attendance_status': record.attendanceStatus,
+          'marked_at': record.offlineMarkedAt?.toIso8601String() ??
+                       DateTime.now().toIso8601String(),
+        };
+      }).toList();
 
-      if (response.data['success'] == true) {
-        final bulkResponse = BulkAttendanceResponseModel.fromJson(response.data);
-        
-        print('Sync completed: ${bulkResponse.summary.successful} successful, ${bulkResponse.summary.failed} failed');
+      final queueResponse = await _syncApiProvider.queueSync(
+        deviceId: _deviceId,
+        syncType: 'attendance',
+        payload: payload,
+      );
 
-        // Remove successfully synced records
-        final successfulRollNumbers = bulkResponse.results
-            .where((result) => result.success)
-            .map((result) => result.rollNumber)
-            .toList();
+      if (queueResponse.data['success'] != true) {
+        CustomToast.error('Failed to queue sync: ${queueResponse.data['message']}');
+        return false;
+      }
 
-        removeSyncedRecords(successfulRollNumbers);
+      print('Queued ${queueResponse.data['queued_records']} records');
 
-        // Show sync result
-        if (bulkResponse.summary.failed == 0) {
-          CustomToast.success('All ${bulkResponse.summary.successful} records synced successfully!');
+      // Step 2: Process the sync
+      final processResponse = await _syncApiProvider.processSync(
+        deviceId: _deviceId,
+      );
+
+      if (processResponse.data['success'] == true) {
+        final processed = processResponse.data['processed'] ?? 0;
+        final failed = processResponse.data['failed'] ?? 0;
+
+        print('Sync completed: $processed processed, $failed failed');
+
+        // Remove all pending records if sync was successful
+        if (failed == 0) {
+          clearPendingRecords();
+          CustomToast.success('All $processed records synced successfully!');
+          return true;
         } else {
-          CustomToast.warning(
-            'Synced ${bulkResponse.summary.successful} records. ${bulkResponse.summary.failed} failed.',
-          );
+          // Partial success - clear successful records
+          // Note: The API should return which records failed, but for now we'll keep all
+          CustomToast.warning('Synced $processed records. $failed failed.');
+          return false;
         }
-
-        return bulkResponse.summary.failed == 0;
       } else {
-        CustomToast.error('Sync failed: ${response.data['message']}');
+        CustomToast.error('Sync processing failed: ${processResponse.data['message']}');
         return false;
       }
     } catch (e) {
@@ -185,6 +236,42 @@ class AttendanceOfflineService extends GetxService {
       return false;
     } finally {
       isSyncing.value = false;
+    }
+  }
+
+  /// Get sync status from API
+  Future<Map<String, dynamic>?> getApiSyncStatus() async {
+    try {
+      final response = await _syncApiProvider.getSyncStatus(deviceId: _deviceId);
+
+      if (response.data['success'] == true) {
+        return {
+          'pending_count': response.data['pending_count'] ?? 0,
+          'completed_count': response.data['completed_count'] ?? 0,
+          'failed_count': response.data['failed_count'] ?? 0,
+          'last_sync_at': response.data['last_sync_at'],
+        };
+      }
+      return null;
+    } catch (e) {
+      print('Error getting sync status: $e');
+      return null;
+    }
+  }
+
+  /// Clear completed sync records from API
+  Future<bool> clearCompletedApiRecords() async {
+    try {
+      final response = await _syncApiProvider.clearCompletedSync(deviceId: _deviceId);
+
+      if (response.data['success'] == true) {
+        print('Cleared ${response.data['cleared_count']} completed records from API');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error clearing completed records: $e');
+      return false;
     }
   }
 

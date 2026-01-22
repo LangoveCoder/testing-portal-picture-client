@@ -189,8 +189,8 @@ class StudentsView extends GetView<StudentsController> {
     );
   }
 
-  Widget _buildStatCard(
-      BuildContext context, String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard(BuildContext context, String label, String value,
+      IconData icon, Color color) {
     return Container(
       padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -262,8 +262,8 @@ class StudentsView extends GetView<StudentsController> {
                       : AppColors.getTextMuted(context).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: hasCaptured 
-                        ? AppColors.success 
+                    color: hasCaptured
+                        ? AppColors.success
                         : AppColors.getTextMuted(context),
                     width: 2,
                   ),
@@ -314,7 +314,8 @@ class StudentsView extends GetView<StudentsController> {
                     SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.badge, size: 14, color: AppColors.getTextMuted(context)),
+                        Icon(Icons.badge,
+                            size: 14, color: AppColors.getTextMuted(context)),
                         SizedBox(width: 4),
                         Text(
                           'Roll: ${student.rollNumber}',
@@ -325,7 +326,7 @@ class StudentsView extends GetView<StudentsController> {
                         ),
                       ],
                     ),
-                    if (student.cnic.isNotEmpty) ...[
+                    if (student.cnic != null && student.cnic!.isNotEmpty) ...[
                       SizedBox(height: 2),
                       Row(
                         children: [

@@ -21,6 +21,8 @@ import '../modules/attendance_stats/bindings/attendance_stats_binding.dart';
 import '../modules/attendance_stats/views/attendance_stats_view.dart';
 import '../modules/test_selection/bindings/test_selection_binding.dart';
 import '../modules/test_selection/views/test_selection_view.dart';
+import '../modules/mark_attendance/bindings/mark_attendance_binding.dart';
+import '../modules/mark_attendance/views/mark_attendance_view.dart';
 
 class AppPages {
   static const INITIAL = AppRoutes.SPLASH;
@@ -81,6 +83,11 @@ class AppPages {
       page: () => const TestSelectionView(),
       binding: TestSelectionBinding(),
     ),
+    GetPage(
+      name: AppRoutes.MARK_ATTENDANCE,
+      page: () => const MarkAttendanceView(),
+      binding: MarkAttendanceBinding(),
+    ),
   ];
 }
 
@@ -96,4 +103,5 @@ class AppRoutes {
   static const String STUDENT_VERIFICATION = '/student-verification';
   static const String ATTENDANCE_STATS = '/attendance-stats';
   static const String TEST_SELECTION = '/test-selection';
+  static const String MARK_ATTENDANCE = '/mark-attendance';
 }

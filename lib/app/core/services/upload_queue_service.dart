@@ -5,10 +5,11 @@ import 'package:get_storage/get_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../data/models/upload_queue_model.dart';
 import '../../data/providers/api_provider.dart';
+import 'auth_service.dart';
 
 class UploadQueueService extends GetxService {
   final GetStorage storage = GetStorage();
-  final ApiProvider apiProvider = ApiProvider();
+  late ApiProvider apiProvider;
   final Connectivity connectivity = Connectivity();
 
   static const String queueKey = 'upload_queue';
@@ -20,8 +21,42 @@ class UploadQueueService extends GetxService {
   @override
   void onInit() {
     super.onInit();
+
+    // Get the shared ApiProvider instance with auth token
+    try {
+      apiProvider = Get.find<ApiProvider>();
+    } catch (e) {
+      print('ApiProvider not found, creating new instance: $e');
+      apiProvider = ApiProvider();
+    }
+
     loadQueue();
     listenToConnectivity();
+    refreshAuthToken();
+
+    // Process any pending items if online
+    _processQueueIfOnline();
+  }
+
+  /// Process queue if device is online (called after initialization)
+  Future<void> _processQueueIfOnline() async {
+    if (await isOnline() && uploadQueue.isNotEmpty) {
+      print('Device is online - processing ${uploadQueue.length} pending items');
+      processQueue();
+    }
+  }
+
+  /// Refresh auth token from AuthService before upload
+  void refreshAuthToken() {
+    try {
+      final authService = Get.find<AuthService>();
+      if (authService.isAuthenticated.value && authService.authToken.value.isNotEmpty) {
+        apiProvider.setAuthToken(authService.authToken.value);
+        print('[UploadQueueService] Auth token refreshed from AuthService');
+      }
+    } catch (e) {
+      print('[UploadQueueService] Could not refresh auth token: $e');
+    }
   }
 
   // Load queue from storage
@@ -93,6 +128,9 @@ class UploadQueueService extends GetxService {
     }
 
     isUploading.value = true;
+
+    // Refresh auth token before starting uploads
+    refreshAuthToken();
 
     try {
       // Get pending items

@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
-import 'package:otsp_attendance/app/core/services/student_cache_service.dart';
+import 'package:otsp_attendance/app/data/providers/api_provider.dart';
 import 'app/routes/app_pages.dart';
 import 'app/core/values/app_colors.dart';
 import 'app/core/values/app_constants.dart';
-import 'app/core/services/upload_queue_service.dart';
-import 'app/core/services/attendance_offline_service.dart';
-import 'app/core/services/attendance_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await GetStorage.init();
 
-  // Initialize Services
-  Get.put(UploadQueueService());
-  Get.put(StudentCacheService());
-  Get.put(AttendanceOfflineService()); // New attendance offline service
-  Get.put(AttendanceService()); // New attendance service
+  // Initialize Services (ORDER MATTERS!)
+  // TEMPORARY: Minimal initialization for development mode
+  try {
+    print('Initializing ApiProvider...');
+    Get.put(ApiProvider(), permanent: true);
+    print('✅ ApiProvider initialized');
+
+    print('All services initialized successfully!');
+  } catch (e, stackTrace) {
+    print('❌ ERROR initializing services: $e');
+    print('Stack trace: $stackTrace');
+  }
 
   runApp(const MyApp());
 }

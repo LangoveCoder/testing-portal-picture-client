@@ -713,6 +713,7 @@ class HomeView extends GetView<HomeController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         title,
@@ -721,6 +722,8 @@ class HomeView extends GetView<HomeController> {
                           fontWeight: FontWeight.bold,
                           color: AppColors.getTextPrimary(context),
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       SizedBox(height: 3),
                       Text(
@@ -729,6 +732,8 @@ class HomeView extends GetView<HomeController> {
                           fontSize: 14,
                           color: AppColors.getTextSecondary(context),
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),

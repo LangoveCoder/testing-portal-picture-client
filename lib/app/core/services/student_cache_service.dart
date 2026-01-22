@@ -5,10 +5,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../data/models/student_model.dart';
 import '../../data/providers/api_provider.dart';
 import '../utils/custom_toast.dart';
+import './auth_service.dart'; // ✅ ADD THIS IMPORT
 
 class StudentCacheService extends GetxService {
   final GetStorage storage = GetStorage();
-  final ApiProvider apiProvider = ApiProvider();
+  late ApiProvider apiProvider;
   final Connectivity connectivity = Connectivity();
 
   static const String studentsKey = 'cached_students';
@@ -21,6 +22,15 @@ class StudentCacheService extends GetxService {
   @override
   void onInit() {
     super.onInit();
+
+    // Get the shared ApiProvider instance with auth token
+    try {
+      apiProvider = Get.find<ApiProvider>();
+    } catch (e) {
+      print('ApiProvider not found, creating new instance: $e');
+      apiProvider = ApiProvider();
+    }
+
     loadCache();
     autoSync();
   }
@@ -90,60 +100,75 @@ class StudentCacheService extends GetxService {
   }
 
   // Sync students from server (download all students)
-  Future<bool> syncStudents({int? testId}) async {
-    if (isSyncing.value) {
-      print('Sync already in progress');
-      return false;
-    }
-
-    if (!await isOnline()) {
-      print('No internet connection for sync');
-      CustomToast.warning('Cannot sync without internet connection');
-      return false;
-    }
-
-    isSyncing.value = true;
-
+  Future<void> syncStudents() async {
     try {
+      isSyncing.value = true;
+      CustomToast.info('Syncing students...');
+
       print('=== SYNCING STUDENTS ===');
 
-      CustomToast.info('Downloading student data');
+      // Get operator's assigned college ID (optional filter)
+      AuthService? authService;
+      try {
+        authService = Get.find<AuthService>();
+      } catch (e) {
+        print('AuthService not found: $e');
+      }
 
-      // Download all students from API
-      final response = await apiProvider.bulkDownloadStudents(testId: testId);
+      final collegeId = authService?.currentOperator.value?.assignedCollegeId;
+      print('College ID: $collegeId');
 
-      if (response.data['success'] == true) {
-        final List<dynamic> studentsData = response.data['data'];
+      final response = await apiProvider.bulkDownloadStudents(
+        collegeId: collegeId,
+      );
 
-        print('Downloaded ${studentsData.length} students');
+      print('✅ Response received');
+      print('Success field: ${response.data['success']}');
+      print('Count field: ${response.data['count']}');
+      print('Response keys: ${response.data.keys}');
+      print('Full response data: ${response.data}');
 
-        // Clear existing cache
+      final studentsField = response.data['students'] ?? response.data['data'];
+
+      if (response.data['success'] == true && studentsField != null) {
+        final List<dynamic> studentsList = studentsField as List<dynamic>;
+
+        print('Processing ${studentsList.length} students...');
+
         cachedStudents.clear();
 
-        // Add all students to cache
-        for (var studentJson in studentsData) {
-          final student = StudentModel.fromJson(studentJson);
-          cachedStudents[student.rollNumber] = student;
+        int successCount = 0;
+        int errorCount = 0;
+
+        for (var studentData in studentsList) {
+          try {
+            final student = StudentModel.fromJson(studentData);
+            cachedStudents[student.rollNumber] = student;
+            successCount++;
+          } catch (e) {
+            print('❌ Error parsing student: $e');
+            errorCount++;
+          }
         }
 
-        // Save to storage
+        print('✅ Successfully cached $successCount students');
+        if (errorCount > 0) {
+          print('❌ Failed to parse $errorCount students');
+        }
+
+        storage.write(lastSyncKey, DateTime.now().toIso8601String());
+        lastSyncTime.value = DateTime.now();
         saveCache();
 
-        print('Cached ${cachedStudents.length} students');
-
-        CustomToast.success('Downloaded ${cachedStudents.length} students for offline use');
-
-        return true;
+        CustomToast.success('Synced $successCount students');
       } else {
-        CustomToast.error(response.data['message'] ?? 'Could not download students');
-        return false;
+        print('❌ Sync failed or students is null');
+        CustomToast.error('Sync failed');
       }
-    } catch (e) {
-      print('Sync error: $e');
-
-      CustomToast.error('Could not sync student data: $e');
-
-      return false;
+    } catch (e, stackTrace) {
+      print('❌ SYNC ERROR: $e');
+      print('Stack trace: $stackTrace');
+      CustomToast.error('Sync failed: $e');
     } finally {
       isSyncing.value = false;
     }
@@ -158,22 +183,35 @@ class StudentCacheService extends GetxService {
     // Wait for services to initialize
     await Future.delayed(Duration(seconds: 1));
 
+    // ✅ Check if user is authenticated first
+    AuthService? authService;
+    try {
+      authService = Get.find<AuthService>();
+      if (!authService.isAuthenticated.value) {
+        print('Skipping auto-sync - not authenticated');
+        return;
+      }
+    } catch (e) {
+      print('AuthService not found - skipping auto-sync: $e');
+      return;
+    }
+
     // Check if online
     final online = await isOnline();
     print('Is online: $online');
 
     if (!online) {
       print('Skipping auto-sync - offline');
-      CustomToast.warning('Connect to internet to sync student data');
+      if (cachedStudents.isEmpty) {
+        CustomToast.warning('Connect to internet to sync student data');
+      }
       return;
     }
 
     // Sync if never synced before OR cache is empty
     if (lastSyncTime.value == null || cachedStudents.isEmpty) {
       print('First time or empty cache - syncing...');
-
       CustomToast.info('Downloading student data for offline use');
-
       await syncStudents();
       return;
     }

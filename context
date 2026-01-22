@@ -1,0 +1,1232 @@
+# Android App Development Context - Biometric Attendance System
+
+## Project Overview
+
+This document provides complete context for developing the **Android Biometric Attendance Application** that integrates with the **Admission Portal Backend API**. The app is used by **Biometric Operators** to mark student attendance during tests using biometric verification.
+
+---
+
+## 1. Backend API Information
+
+### Base Configuration
+- **Base URL**: `http://<server-ip>/api`
+- **Authentication**: Laravel Sanctum (Bearer Token)
+- **Rate Limiting**: Active (handle 429 errors gracefully)
+- **Response Format**: JSON
+
+### Required Headers (All Requests)
+```http
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+---
+
+## 2. User Roles & Permissions
+
+### Operator Role
+- **Purpose**: Mark attendance, register fingerprints, upload photos
+- **Access Level**: Can only access students from their assigned college
+- **Restrictions**: Cannot access college admin features
+- **Device Type**: `android`
+
+### Key Security Rules
+1. Operators are assigned to ONE specific college (`assigned_college_id`)
+2. All API requests are filtered by college - attempting to access another college's data returns `403 Forbidden`
+3. All actions are logged with operator ID, device info, and timestamp
+4. Tokens expire after 30 days of inactivity
+
+---
+
+## 3. API Endpoints Reference
+
+### 3.1 Authentication
+
+#### Login
+```http
+POST /api/auth/biometric-operator/login
+```
+
+**Request Body:**
+```json
+{
+    "email": "operator@example.com",
+    "password": "secret_password",
+    "device_type": "android",
+    "device_info": "Samsung Galaxy S21 - Android 12"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Login successful",
+    "role": "operator",
+    "token": "1|abcdefghijklmnopqrstuvwxyz123456",
+    "operator": {
+        "id": 1,
+        "name": "John Doe",
+        "email": "operator@example.com",
+        "phone": "+923001234567",
+        "role": "operator",
+        "status": "active",
+        "assigned_college_id": 5,
+        "last_login_at": "2026-01-21 10:30:00",
+        "college": {
+            "id": 5,
+            "name": "Government College University",
+            "city": "Lahore"
+        }
+    }
+}
+```
+
+**Error Responses:**
+- **401 Unauthorized**: Invalid credentials
+- **403 Forbidden**: Account inactive or wrong role
+- **422 Validation Error**: Missing/invalid fields
+
+**Implementation Notes:**
+- Store `token` securely using `EncryptedSharedPreferences`
+- Store `operator.id`, `operator.assigned_college_id`, and `operator.role` locally
+- Store `operator.name` for UI display
+- Update `last_login_at` timestamp
+- Verify `role` is `"operator"` before proceeding
+
+---
+
+#### Logout
+```http
+POST /api/operator/logout
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Logged out successfully"
+}
+```
+
+**Implementation Notes:**
+- Clear all stored credentials and tokens
+- Clear local cache/database
+- Redirect to login screen
+
+---
+
+#### Refresh Token
+```http
+POST /api/operator/refresh-token
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "token": "2|newTokenHere123456"
+}
+```
+
+**Implementation Notes:**
+- Refresh token before expiry (recommend: every 15 days)
+- Update stored token seamlessly without logout
+
+---
+
+#### Get Current Operator Profile
+```http
+GET /api/operator/me
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "operator": {
+        "id": 1,
+        "name": "John Doe",
+        "email": "operator@example.com",
+        "role": "operator",
+        "assigned_college_id": 5,
+        "college": { ... }
+    }
+}
+```
+
+---
+
+### 3.2 Attendance Management
+
+#### Get Student Information (Before Marking Attendance)
+```http
+POST /api/attendance/student-info
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "test_id": 1
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "student": {
+        "id": 100,
+        "roll_number": "123456",
+        "name": "Muhammad Ali",
+        "father_name": "Ahmed Ali",
+        "cnic": "12345-1234567-1",
+        "college_id": 5,
+        "test_id": 1,
+        "test_photo": "data:image/jpeg;base64,...",
+        "fingerprint_status": "registered",
+        "biometric_registered_at": "2026-01-15 09:00:00",
+        "attendance": {
+            "status": "present",
+            "marked_at": "2026-01-20 08:30:00",
+            "marked_by": "Jane Smith"
+        }
+    }
+}
+```
+
+**Error Responses:**
+- **403 Forbidden**: Student belongs to another college
+```json
+{
+    "success": false,
+    "message": "Access denied. Student belongs to another college."
+}
+```
+- **404 Not Found**: Student not found
+```json
+{
+    "success": false,
+    "message": "Student not found with the provided roll number and test ID"
+}
+```
+
+**Implementation Notes:**
+- Show student photo and details before marking attendance
+- Display warning if attendance already marked
+- Show biometric registration status
+- Handle 403 error with clear message: "Student belongs to another college"
+
+---
+
+#### Mark Attendance (Single Student)
+```http
+POST /api/attendance/mark
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "test_id": 1,
+    "attendance_status": "present",
+    "device_info": "Android App v1.0.2 - Samsung S21"
+}
+```
+
+**Attendance Status Values:**
+- `"present"` - Student attended
+- `"absent"` - Student did not attend
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Attendance marked successfully",
+    "attendance": {
+        "id": 500,
+        "roll_number": "123456",
+        "student_id": 100,
+        "test_id": 1,
+        "attendance_status": "present",
+        "marked_at": "2026-01-21 10:45:00",
+        "marked_by": 1,
+        "device_info": "Android App v1.0.2 - Samsung S21"
+    }
+}
+```
+
+**Error Responses:**
+- **403 Forbidden**: Cannot access student from another college
+- **409 Conflict**: Attendance already marked
+```json
+{
+    "success": false,
+    "message": "Attendance already marked for this student"
+}
+```
+
+**Implementation Notes:**
+- Show success confirmation with timestamp
+- Update local cache/database
+- If offline, queue for sync (see Offline Sync section)
+
+---
+
+#### Mark Bulk Attendance
+```http
+POST /api/attendance/bulk-mark
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "test_id": 1,
+    "attendances": [
+        {
+            "roll_number": "123456",
+            "attendance_status": "present"
+        },
+        {
+            "roll_number": "123457",
+            "attendance_status": "absent"
+        },
+        {
+            "roll_number": "123458",
+            "attendance_status": "present"
+        }
+    ],
+    "device_info": "Android App v1.0.2"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Bulk attendance marked successfully",
+    "marked": 3,
+    "failed": 0,
+    "results": [
+        {
+            "roll_number": "123456",
+            "success": true
+        },
+        {
+            "roll_number": "123457",
+            "success": true
+        },
+        {
+            "roll_number": "123458",
+            "success": true
+        }
+    ]
+}
+```
+
+**Implementation Notes:**
+- Use for batch operations (e.g., mark all as present)
+- Show progress indicator
+- Display summary of successful/failed operations
+
+---
+
+#### Update Attendance
+```http
+PUT /api/attendance/update
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "attendance_id": 500,
+    "attendance_status": "absent",
+    "device_info": "Android App v1.0.2"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Attendance updated successfully"
+}
+```
+
+**Implementation Notes:**
+- Use for correcting mistakes
+- Require confirmation before updating
+- Log reason for change if possible
+
+---
+
+#### Get Attendance List
+```http
+GET /api/attendance/list?test_id=1&status=present&page=1
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `test_id` (required): Test ID
+- `status` (optional): Filter by `present` or `absent`
+- `page` (optional): Page number for pagination
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 500,
+            "roll_number": "123456",
+            "student_name": "Muhammad Ali",
+            "attendance_status": "present",
+            "marked_at": "2026-01-21 10:45:00"
+        }
+    ],
+    "pagination": {
+        "current_page": 1,
+        "total_pages": 10,
+        "total_records": 500
+    }
+}
+```
+
+---
+
+#### Get Attendance Statistics
+```http
+GET /api/attendance/stats?test_id=1
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "stats": {
+        "total_students": 500,
+        "present": 450,
+        "absent": 30,
+        "not_marked": 20,
+        "percentage_present": 90.0
+    }
+}
+```
+
+**Implementation Notes:**
+- Display on dashboard
+- Show pie chart or progress bar
+- Update in real-time as attendance is marked
+
+---
+
+### 3.3 Photo Upload
+
+#### Upload Test Photo (Multipart)
+```http
+POST /api/photos/upload
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+**Form Data:**
+- `roll_number` (string): Student roll number
+- `test_id` (int): Test ID
+- `photo` (file): Image file (JPEG/PNG, max 5MB)
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Photo uploaded successfully",
+    "photo_path": "storage/test_photos/123456_test_1.jpg"
+}
+```
+
+---
+
+#### Upload Test Photo (Base64)
+```http
+POST /api/photos/upload-base64
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "test_id": 1,
+    "photo": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Photo uploaded successfully"
+}
+```
+
+**Implementation Notes:**
+- Use Base64 for camera capture
+- Use Multipart for gallery selection
+- Compress images before upload (target: < 500KB)
+- Show preview before upload
+- Handle upload failures gracefully
+
+---
+
+### 3.4 Fingerprint Registration
+
+#### Search Student for Registration
+```http
+POST /api/fingerprint/register/search-student
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "test_id": 1
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "student": {
+        "id": 100,
+        "roll_number": "123456",
+        "name": "Muhammad Ali",
+        "father_name": "Ahmed Ali",
+        "cnic": "12345-1234567-1",
+        "fingerprint_status": "not_registered",
+        "test_photo": "data:image/jpeg;base64,..."
+    }
+}
+```
+
+---
+
+#### Upload Fingerprint Template
+```http
+POST /api/fingerprint/register/upload-template
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "test_id": 1,
+    "fingerprint_template": "BASE64_ENCODED_TEMPLATE_DATA",
+    "device_info": "Android App v1.0.2"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Fingerprint template uploaded successfully"
+}
+```
+
+---
+
+#### Upload Fingerprint Image (Base64)
+```http
+POST /api/fingerprint/register/upload-image-base64
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "test_id": 1,
+    "fingerprint_image": "data:image/png;base64,...",
+    "device_info": "Android App v1.0.2"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Fingerprint image uploaded successfully"
+}
+```
+
+---
+
+#### Validate Fingerprint Quality
+```http
+POST /api/fingerprint/register/validate-quality
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "quality_score": 85,
+    "device_info": "Android App v1.0.2"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Fingerprint quality is acceptable",
+    "quality_score": 85,
+    "status": "good"
+}
+```
+
+**Quality Score Ranges:**
+- `90-100`: Excellent
+- `70-89`: Good
+- `50-69`: Acceptable
+- `< 50`: Poor (reject and retry)
+
+---
+
+### 3.5 Offline Synchronization
+
+#### Queue Data for Sync
+```http
+POST /api/sync/queue
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "device_id": "android_device_12345",
+    "sync_type": "attendance",
+    "payload": [
+        {
+            "roll_number": "123456",
+            "test_id": 1,
+            "attendance_status": "present",
+            "marked_at": "2026-01-21 10:00:00"
+        },
+        {
+            "roll_number": "123457",
+            "test_id": 1,
+            "attendance_status": "present",
+            "marked_at": "2026-01-21 10:01:30"
+        }
+    ]
+}
+```
+
+**Sync Types:**
+- `"attendance"` - Attendance records
+- `"fingerprint"` - Fingerprint data
+- `"photos"` - Test photos
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Data queued for synchronization",
+    "queued_records": 2
+}
+```
+
+---
+
+#### Process Pending Sync
+```http
+POST /api/sync/process
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "device_id": "android_device_12345"
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Sync completed successfully",
+    "processed": 2,
+    "failed": 0
+}
+```
+
+---
+
+#### Get Sync Status
+```http
+GET /api/sync/status?device_id=android_device_12345
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "pending_count": 5,
+    "completed_count": 150,
+    "failed_count": 2,
+    "last_sync_at": "2026-01-21 09:00:00"
+}
+```
+
+---
+
+#### Clear Completed Sync Records
+```http
+DELETE /api/sync/clear-completed?device_id=android_device_12345
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "message": "Completed sync records cleared",
+    "cleared_count": 150
+}
+```
+
+---
+
+### 3.6 Shared Endpoints
+
+#### Get Active Colleges
+```http
+GET /api/colleges
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "colleges": [
+        {
+            "id": 5,
+            "name": "Government College University",
+            "city": "Lahore",
+            "status": "active"
+        }
+    ]
+}
+```
+
+**Note**: Operators will only see their assigned college.
+
+---
+
+#### Get Student Info (Generic)
+```http
+POST /api/student/info
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "roll_number": "123456",
+    "test_id": 1
+}
+```
+
+**Success Response**: Similar to attendance/student-info
+
+---
+
+#### Bulk Download Students
+```http
+POST /api/bulk/students/download
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+    "test_id": 1
+}
+```
+
+**Success Response (200):**
+```json
+{
+    "success": true,
+    "students": [
+        {
+            "id": 100,
+            "roll_number": "123456",
+            "name": "Muhammad Ali",
+            "cnic": "12345-1234567-1",
+            "college_id": 5,
+            "fingerprint_status": "registered"
+        }
+    ],
+    "total": 500
+}
+```
+
+**Implementation Notes:**
+- Use for offline mode preparation
+- Cache locally in SQLite database
+- Only downloads students from operator's assigned college
+- Limit: 1000 students per request
+
+---
+
+## 4. Error Handling
+
+### HTTP Status Codes
+
+| Status Code | Meaning | Action Required |
+|-------------|---------|-----------------|
+| **200** | Success | Process response data |
+| **401** | Unauthorized | Token invalid/expired - logout and redirect to login |
+| **403** | Forbidden | Access denied - show error message |
+| **404** | Not Found | Resource doesn't exist - show appropriate message |
+| **409** | Conflict | Duplicate operation (e.g., attendance already marked) |
+| **422** | Validation Error | Invalid input - show validation errors |
+| **429** | Too Many Requests | Rate limit exceeded - wait and retry |
+| **500** | Server Error | Backend error - show generic error message |
+
+### Error Response Format
+```json
+{
+    "success": false,
+    "message": "Error description",
+    "errors": {
+        "field_name": ["Validation error message"]
+    }
+}
+```
+
+### Retry Strategy
+- **Network Timeout**: Retry up to 3 times with exponential backoff
+- **429 Rate Limit**: Wait 60 seconds before retry
+- **500 Server Error**: Retry once after 5 seconds
+- **401 Unauthorized**: Do not retry - logout immediately
+
+---
+
+## 5. Offline Mode Implementation
+
+### Requirements
+1. **Local Database**: SQLite for caching students, tests, and pending operations
+2. **Sync Queue**: Store operations when offline (attendance, photos, fingerprints)
+3. **Network Detection**: Monitor connectivity changes
+4. **Background Sync**: Automatically sync when connection restored
+
+### Offline Workflow
+
+#### Step 1: Prepare Offline Data (When Online)
+```kotlin
+// Download student list for test
+val students = api.bulkDownloadStudents(testId)
+localDb.saveStudents(students)
+```
+
+#### Step 2: Queue Operations (When Offline)
+```kotlin
+// Save attendance to local queue
+val attendance = AttendanceRecord(
+    rollNumber = "123456",
+    testId = 1,
+    status = "present",
+    markedAt = System.currentTimeMillis(),
+    synced = false
+)
+localDb.queueAttendance(attendance)
+```
+
+#### Step 3: Sync When Online
+```kotlin
+// Get unsynced records
+val pendingRecords = localDb.getUnsyncedAttendance()
+
+// Queue for sync
+val response = api.queueSync(
+    deviceId = deviceId,
+    syncType = "attendance",
+    payload = pendingRecords
+)
+
+// Process sync
+api.processSync(deviceId)
+
+// Mark as synced
+localDb.markAsSynced(pendingRecords)
+```
+
+### Sync Indicators
+- Show sync status icon in toolbar (synced/pending/syncing)
+- Display count of pending records
+- Show last sync timestamp
+- Allow manual sync trigger
+
+---
+
+## 6. Security Best Practices
+
+### Token Management
+```kotlin
+// Store token securely
+val encryptedPrefs = EncryptedSharedPreferences.create(
+    "secure_prefs",
+    MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build(),
+    context,
+    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+)
+
+encryptedPrefs.edit().putString("auth_token", token).apply()
+```
+
+### HTTPS Only
+```kotlin
+// Force HTTPS in production
+val baseUrl = if (BuildConfig.DEBUG) {
+    "http://192.168.1.100:8000/api"
+} else {
+    "https://api.admission-portal.com/api"
+}
+```
+
+### Certificate Pinning (Production)
+```kotlin
+val certificatePinner = CertificatePinner.Builder()
+    .add("api.admission-portal.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+    .build()
+```
+
+### Request Interceptor
+```kotlin
+class AuthInterceptor(private val tokenProvider: () -> String?) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request().newBuilder()
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
+
+        tokenProvider()?.let { token ->
+            request.addHeader("Authorization", "Bearer $token")
+        }
+
+        return chain.proceed(request.build())
+    }
+}
+```
+
+---
+
+## 7. App Architecture Recommendations
+
+### Tech Stack
+- **Language**: Kotlin
+- **Architecture**: MVVM (Model-View-ViewModel)
+- **DI**: Hilt
+- **Networking**: Retrofit + OkHttp
+- **Local DB**: Room
+- **Image Loading**: Coil or Glide
+- **Biometric**: AndroidX Biometric Library
+- **Coroutines**: Kotlin Coroutines for async operations
+
+### Project Structure
+```
+app/
+├── data/
+│   ├── local/
+│   │   ├── dao/
+│   │   ├── entity/
+│   │   └── database/
+│   ├── remote/
+│   │   ├── api/
+│   │   └── dto/
+│   └── repository/
+├── domain/
+│   ├── model/
+│   └── usecase/
+├── presentation/
+│   ├── login/
+│   ├── attendance/
+│   ├── fingerprint/
+│   └── sync/
+└── utils/
+    ├── NetworkMonitor.kt
+    ├── SyncManager.kt
+    └── SecurityUtils.kt
+```
+
+---
+
+## 8. Testing Checklist
+
+### Authentication Flow
+- [ ] Login with valid credentials
+- [ ] Login with invalid credentials
+- [ ] Token expiry handling
+- [ ] Logout functionality
+- [ ] Token refresh
+
+### Attendance Features
+- [ ] Search student by roll number
+- [ ] Mark attendance (present/absent)
+- [ ] Update attendance
+- [ ] View attendance list
+- [ ] View attendance statistics
+- [ ] Handle duplicate attendance marking
+
+### Offline Mode
+- [ ] Download student list
+- [ ] Queue attendance when offline
+- [ ] Auto-sync when online
+- [ ] Manual sync trigger
+- [ ] Sync status indicators
+
+### Error Scenarios
+- [ ] Network timeout
+- [ ] Rate limit exceeded (429)
+- [ ] Unauthorized access (401)
+- [ ] Forbidden access (403)
+- [ ] Server error (500)
+- [ ] Invalid input (422)
+
+### Security
+- [ ] Token stored securely
+- [ ] HTTPS enforcement
+- [ ] No sensitive data in logs
+- [ ] Proper session management
+
+---
+
+## 9. UI/UX Guidelines
+
+### Login Screen
+- Email input with validation
+- Password input (masked)
+- Remember me checkbox
+- Login button
+- Version number display
+
+### Dashboard
+- Welcome message with operator name
+- Assigned college display
+- Active test selection
+- Attendance statistics card
+- Sync status indicator
+- Quick action buttons (Mark Attendance, View List)
+
+### Mark Attendance Screen
+- Roll number input (barcode scanner option)
+- Student info display (photo, name, father name)
+- Present/Absent buttons
+- Fingerprint verification option
+- Success/error toast messages
+
+### Attendance List Screen
+- Filter by status (All/Present/Absent)
+- Search by roll number
+- Pull to refresh
+- Pagination
+- Export to CSV option
+
+### Sync Screen
+- Pending records count
+- Last sync timestamp
+- Manual sync button
+- Sync progress indicator
+- Error logs display
+
+---
+
+## 10. Performance Optimization
+
+### Image Handling
+- Compress before upload (target: < 500KB)
+- Use WebP format for storage
+- Cache decoded images
+- Lazy load in lists
+
+### API Optimization
+- Implement request caching
+- Use pagination for lists
+- Batch operations when possible
+- Debounce search queries
+
+### Database Optimization
+- Index frequently queried columns
+- Use transactions for bulk inserts
+- Clear old sync records periodically
+- Optimize queries with EXPLAIN
+
+---
+
+## 11. Quick Start Guide for Developers
+
+### Step 1: Setup API Client
+```kotlin
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(
+        authInterceptor: AuthInterceptor
+    ): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("http://192.168.1.100:8000/api/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideApiService(retrofit: Retrofit): ApiService {
+        return retrofit.create(ApiService::class.java)
+    }
+}
+```
+
+### Step 2: Define API Interface
+```kotlin
+interface ApiService {
+
+    @POST("auth/biometric-operator/login")
+    suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
+
+    @POST("attendance/student-info")
+    suspend fun getStudentInfo(@Body request: StudentInfoRequest): Response<StudentResponse>
+
+    @POST("attendance/mark")
+    suspend fun markAttendance(@Body request: MarkAttendanceRequest): Response<AttendanceResponse>
+
+    // Add other endpoints...
+}
+```
+
+### Step 3: Create Repository
+```kotlin
+class AttendanceRepository @Inject constructor(
+    private val apiService: ApiService,
+    private val localDb: AppDatabase
+) {
+
+    suspend fun markAttendance(
+        rollNumber: String,
+        testId: Int,
+        status: String
+    ): Result<AttendanceResponse> {
+        return try {
+            val response = apiService.markAttendance(
+                MarkAttendanceRequest(rollNumber, testId, status, getDeviceInfo())
+            )
+            if (response.isSuccessful) {
+                Result.success(response.body()!!)
+            } else {
+                Result.failure(Exception(response.message()))
+            }
+        } catch (e: Exception) {
+            // Queue for offline sync
+            localDb.attendanceDao().insert(
+                AttendanceEntity(rollNumber, testId, status, synced = false)
+            )
+            Result.failure(e)
+        }
+    }
+}
+```
+
+---
+
+## 12. Support & Documentation
+
+### Backend API Documentation
+- Base URL: `http://127.0.0.1:8000`
+- Admin Panel: `http://127.0.0.1:8000/super-admin/login`
+- Login: `admin` / `admin123`
+
+### Rate Limits
+- Authentication: 5 requests/minute
+- Attendance: 30 requests/minute
+- Fingerprint: 20 requests/minute
+- Bulk operations: 10 requests/minute
+
+### Contact
+- For API issues: Check backend logs at `storage/logs/laravel.log`
+- For authentication issues: Verify token in `personal_access_tokens` table
+- For testing: Use provided `verify_api.ps1` script
+
+---
+
+## 13. Migration from Old API
+
+### Deprecated Endpoints (Remove)
+```kotlin
+// OLD - DELETE THESE
+@POST("biometric_login")
+@POST("get_student")
+@POST("mark_attendance")
+@POST("upload_fingerprint")
+@POST("verify_student")
+```
+
+### New Endpoints (Use These)
+```kotlin
+// NEW - USE THESE
+@POST("auth/biometric-operator/login")
+@POST("attendance/student-info")
+@POST("attendance/mark")
+@POST("fingerprint/register/upload-template")
+@POST("fingerprint/verify/verify")
+```
+
+### Migration Steps
+1. Update base URL to include `/api` prefix
+2. Add Sanctum token authentication
+3. Update all endpoint paths
+4. Add required headers (Accept, Authorization)
+5. Update request/response models
+6. Test all features thoroughly
+7. Remove old code
+
+---
+
+**Last Updated**: January 21, 2026
+**API Version**: v1.0
+**Document Version**: 1.0

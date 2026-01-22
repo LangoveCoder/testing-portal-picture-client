@@ -24,6 +24,18 @@ class AttendanceApiProvider {
     ));
   }
 
+  /// Set authentication token
+  void setAuthToken(String token) {
+    _dio.options.headers['Authorization'] = 'Bearer $token';
+    print('[AttendanceApiProvider] Auth token set');
+  }
+
+  /// Clear authentication token
+  void clearAuthToken() {
+    _dio.options.headers.remove('Authorization');
+    print('[AttendanceApiProvider] Auth token cleared');
+  }
+
   /// Get student information for attendance
   Future<Response> getAttendanceStudentInfo(String rollNumber, int testId) async {
     try {

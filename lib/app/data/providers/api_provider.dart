@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import '../../core/values/app_constants.dart';
+import '../../core/services/retry_interceptor.dart';
+import '../../core/services/api_error_handler.dart';
 
 class ApiProvider {
   late Dio _dio;
@@ -7,15 +9,17 @@ class ApiProvider {
   ApiProvider() {
     _dio = Dio(BaseOptions(
       baseUrl: AppConstants.baseUrl,
-      connectTimeout:
-          const Duration(milliseconds: AppConstants.connectionTimeout),
-      receiveTimeout: const Duration(milliseconds: AppConstants.receiveTimeout),
+      connectTimeout: const Duration(seconds: 60), // ✅ 60 seconds
+      receiveTimeout: const Duration(seconds: 60), // ✅ 60 seconds
       headers: {
         'Accept': 'application/json',
       },
     ));
 
-    // Add interceptors for logging
+    // Add retry interceptor FIRST (before logging)
+    _dio.interceptors.add(RetryInterceptor(dio: _dio));
+
+    // Add logging interceptor
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
         print('REQUEST[${options.method}] => PATH: ${options.path}');
@@ -28,38 +32,54 @@ class ApiProvider {
         return handler.next(response);
       },
       onError: (error, handler) {
-        print(
-            'ERROR[${error.response?.statusCode}] => MESSAGE: ${error.message}');
+        print('ERROR[${error.response?.statusCode}] => MESSAGE: ${error.message}');
         print('ERROR DATA: ${error.response?.data}');
+
+        // Handle error with ApiErrorHandler
+        final errorMessage = ApiErrorHandler.handleError(error);
+        ApiErrorHandler.showErrorToast(errorMessage);
+
         return handler.next(error);
       },
     ));
   }
 
-  // Authenticate Operator
-  Future<Response> authenticateOperator(String email, String password) async {
+  // ✅ Set Auth Token
+  void setAuthToken(String token) {
+    _dio.options.headers['Authorization'] = 'Bearer $token';
+    print('Auth token set: Bearer ${token.substring(0, 10)}...');
+  }
+
+  // ✅ Clear Auth Token
+  void clearAuthToken() {
+    _dio.options.headers.remove('Authorization');
+    print('Auth token cleared');
+  }
+
+  // ✅ Biometric Operator Login
+  Future<Response> biometricOperatorLogin({
+    required String email,
+    required String password,
+  }) async {
     try {
-      print('=== API PROVIDER AUTHENTICATION ===');
+      print('=== BIOMETRIC OPERATOR LOGIN ===');
       print('Base URL: ${AppConstants.baseUrl}');
-      print('Endpoint: /biometric-operator/login');
-      print('Full URL: ${AppConstants.baseUrl}/biometric-operator/login');
+      print('Endpoint: /auth/biometric-operator/login');
+      print('Full URL: ${AppConstants.baseUrl}/auth/biometric-operator/login');
       print('Email: $email');
       print('Password length: ${password.length}');
-      
+
       final requestData = {
         'email': email,
         'password': password,
-        'device_info': {
-          'platform': 'Android',
-          'app_version': '1.0.0',
-          'device_model': 'Mobile Device',
-        },
+        'device_type': 'android',
+        'device_info': 'Flutter App v1.0.0 - Mobile Device',
       };
-      
+
       print('Request data: $requestData');
-      
+
       final response = await _dio.post(
-        '/biometric-operator/login',
+        '/auth/biometric-operator/login',
         data: requestData,
         options: Options(
           headers: {
@@ -72,19 +92,19 @@ class ApiProvider {
           },
         ),
       );
-      
+
       print('=== API RESPONSE RECEIVED ===');
       print('Status Code: ${response.statusCode}');
       print('Headers: ${response.headers}');
       print('Data Type: ${response.data.runtimeType}');
       print('Raw Response: ${response.data}');
-      
+
       return response;
     } catch (e) {
       print('=== API PROVIDER ERROR ===');
       print('Error type: ${e.runtimeType}');
       print('Error message: $e');
-      
+
       if (e is DioException) {
         print('DioException details:');
         print('- Type: ${e.type}');
@@ -94,7 +114,76 @@ class ApiProvider {
         print('- Request path: ${e.requestOptions.path}');
         print('- Request data: ${e.requestOptions.data}');
       }
-      
+
+      rethrow;
+    }
+  }
+
+  // ✅ KEEP: Authenticate Operator (legacy - for compatibility)
+  Future<Response> authenticateOperator(String email, String password) async {
+    // Redirect to new method
+    return await biometricOperatorLogin(email: email, password: password);
+  }
+
+  // ✅ Logout - calls API endpoint
+  Future<Response> logout() async {
+    try {
+      print('=== LOGOUT API CALL ===');
+      final response = await _dio.post(
+        AppConstants.logoutEndpoint,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      print('Logout response: ${response.statusCode}');
+      return response;
+    } catch (e) {
+      print('Logout error: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ Refresh Token
+  Future<Response> refreshToken() async {
+    try {
+      print('=== REFRESH TOKEN ===');
+      final response = await _dio.post(
+        AppConstants.refreshTokenEndpoint,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      print('Token refreshed: ${response.statusCode}');
+      return response;
+    } catch (e) {
+      print('Token refresh error: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ Get Current Operator Profile
+  Future<Response> getCurrentOperator() async {
+    try {
+      print('=== GET CURRENT OPERATOR ===');
+      final response = await _dio.get(
+        AppConstants.operatorMeEndpoint,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      print('Operator profile: ${response.statusCode}');
+      return response;
+    } catch (e) {
+      print('Get operator error: $e');
       rethrow;
     }
   }
@@ -105,7 +194,8 @@ class ApiProvider {
     required int operatorId,
   }) async {
     try {
-      print('Getting available tests for college: $collegeId, operator: $operatorId');
+      print(
+          'Getting available tests for college: $collegeId, operator: $operatorId');
       return await _dio.get(
         '/attendance/tests/available',
         queryParameters: {
@@ -194,24 +284,28 @@ class ApiProvider {
     }
   }
 
-  // Bulk download students
-  Future<Response> bulkDownloadStudents({int? testId}) async {
+  // ✅ Bulk download students with college filter
+  Future<Response> bulkDownloadStudents({
+    int? testId,
+    int? collegeId, // ✅ ADDED
+  }) async {
     try {
       print('Bulk downloading students...');
+      print('Test ID filter: $testId');
+      print('College ID filter: $collegeId');
 
       Map<String, dynamic> data = {};
       if (testId != null) {
         data['test_id'] = testId;
       }
+      if (collegeId != null) {
+        // ✅ ADDED
+        data['college_id'] = collegeId;
+      }
 
       final response = await _dio.post(
-        '/biometric/students/bulk-download',
+        AppConstants.bulkDownloadStudentsEndpoint,
         data: data,
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        ),
       );
 
       print('Downloaded ${response.data['count']} students');

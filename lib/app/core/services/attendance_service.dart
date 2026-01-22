@@ -8,11 +8,12 @@ import '../../data/models/attendance_request_model.dart';
 import '../../data/models/attendance_stats_model.dart';
 import '../../data/providers/attendance_api_provider.dart';
 import 'attendance_offline_service.dart';
+import 'auth_service.dart';
 import '../utils/custom_toast.dart';
 
 class AttendanceService extends GetxService {
   final AttendanceApiProvider _apiProvider = AttendanceApiProvider();
-  final AttendanceOfflineService _offlineService = Get.find<AttendanceOfflineService>();
+  late AttendanceOfflineService _offlineService;
   final GetStorage _storage = GetStorage();
 
   var currentTestId = 0.obs;
@@ -27,8 +28,23 @@ class AttendanceService extends GetxService {
   @override
   void onInit() {
     super.onInit();
+    _offlineService = Get.find<AttendanceOfflineService>();
     _loadSettings();
     _getDeviceInfo();
+    setAuthToken();
+  }
+
+  /// Set auth token from AuthService
+  void setAuthToken() {
+    try {
+      final authService = Get.find<AuthService>();
+      if (authService.isAuthenticated.value && authService.authToken.value.isNotEmpty) {
+        _apiProvider.setAuthToken(authService.authToken.value);
+        print('[AttendanceService] Auth token set from AuthService');
+      }
+    } catch (e) {
+      print('[AttendanceService] Could not get auth token: $e');
+    }
   }
 
   /// Load settings from storage
